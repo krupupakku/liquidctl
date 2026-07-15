@@ -180,12 +180,18 @@ def render_frame(cpu_temp, gpu_temp, font_path, warn_temp, crit_temp, scale_max)
         draw.text(label_pos, label, font=label_font, fill=_COLOR_TEXT)
 
         number_text = f"{round(temp)}°"
+        number_y = y_offset - int(6 * SUPERSAMPLE)
         bbox = draw.textbbox((0, 0), number_text, font=number_font)
         text_w = bbox[2] - bbox[0]
-        number_pos = (size - margin - text_w, y_offset - int(6 * SUPERSAMPLE))
+        number_pos = (size - margin - text_w, number_y)
         draw.text(number_pos, number_text, font=number_font, fill=_COLOR_TEXT)
 
-        bar_y = y_offset + int(34 * SUPERSAMPLE)
+        # place the bar below the actual bottom of the (taller) number glyphs,
+        # not a fixed offset from y_offset, otherwise descenders/large digits
+        # can overlap the bar
+        number_bottom = number_y + draw.textbbox((0, 0), number_text, font=number_font)[3]
+        bar_gap = int(12 * SUPERSAMPLE)
+        bar_y = number_bottom + bar_gap
         bar_box = [margin, bar_y, margin + bar_width, bar_y + bar_height]
         draw.rounded_rectangle(bar_box, radius=bar_height // 2, fill=_COLOR_TRACK)
 
@@ -269,6 +275,9 @@ def main():
     device.connect()
     try:
         device.initialize()
+        # drain any broadcasts accumulated during connect/initialize before
+        # the first set_screen() call (see comment further below)
+        device.device.clear_enqueued_reports()
 
         last_cpu = None
         last_gpu = None
@@ -288,6 +297,12 @@ def main():
                     frame_buffer = render_frame(
                         cpu_temp, gpu_temp, font_path, warn_temp, crit_temp, scale_max
                     )
+                    # the 2024 Plus continuously pushes unsolicited status
+                    # broadcasts on the same endpoint used for command
+                    # responses; set_screen()'s internal handshake only
+                    # tolerates a handful of those before giving up, so drain
+                    # any backlog here first (see liquidctl issues #864, #908)
+                    device.device.clear_enqueued_reports()
                     device.set_screen("lcd", "static", frame_buffer)
                     last_cpu = round(cpu_temp)
                     last_gpu = round(gpu_temp)
