@@ -27,7 +27,7 @@ Description=Kraken LCD CPU/GPU temperature monitor (via distrobox)
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/distrobox enter liquictl-box -- /home/deck/kraken-lcd-monitor/venv/bin/python3 /home/deck/Developer/liquidctl/extra/contrib/kraken-lcd-monitor/kraken_lcd_monitor.py --interval 2
+ExecStart=/usr/bin/distrobox enter liquictl-box -- /home/deck/kraken-lcd-monitor/venv/bin/python3 /home/deck/Developer/liquidctl/extra/contrib/kraken-lcd-monitor/kraken_lcd_monitor.py --match kraken --interval 2
 ExecStopPost=/usr/bin/distrobox enter liquictl-box -- /home/deck/kraken-lcd-monitor/venv/bin/liquidctl --match kraken set lcd screen liquid
 Restart=on-failure
 
