@@ -175,23 +175,32 @@ def render_frame(cpu_temp, gpu_temp, font_path, warn_temp, crit_temp, scale_max)
     bar_width = size - 2 * margin
     row_height = size // 2
 
-    def draw_row(y_offset, label, temp):
-        label_pos = (margin, y_offset)
-        draw.text(label_pos, label, font=label_font, fill=_COLOR_TEXT)
-
+    def draw_row(row_center_y, label, temp):
         number_text = f"{round(temp)}°"
-        number_y = y_offset - int(6 * SUPERSAMPLE)
-        bbox = draw.textbbox((0, 0), number_text, font=number_font)
-        text_w = bbox[2] - bbox[0]
-        number_pos = (size - margin - text_w, number_y)
-        draw.text(number_pos, number_text, font=number_font, fill=_COLOR_TEXT)
+        num_bbox = draw.textbbox((0, 0), number_text, font=number_font)
+        num_top = num_bbox[1]
+        num_w = num_bbox[2] - num_bbox[0]
+        num_h = num_bbox[3] - num_bbox[1]
 
-        # place the bar below the actual bottom of the (taller) number glyphs,
-        # not a fixed offset from y_offset, otherwise descenders/large digits
-        # can overlap the bar
-        number_bottom = number_y + draw.textbbox((0, 0), number_text, font=number_font)[3]
+        # each row is a self-contained block (number + gap + bar) centered
+        # vertically within its half of the canvas, so nothing overflows
         bar_gap = int(12 * SUPERSAMPLE)
-        bar_y = number_bottom + bar_gap
+        block_height = num_h + bar_gap + bar_height
+        block_top = row_center_y - block_height // 2
+
+        # big temperature number, right-aligned; compensate for the font's
+        # internal top padding so its visual top sits at block_top
+        number_x = size - margin - num_w
+        draw.text((number_x, block_top - num_top), number_text, font=number_font, fill=_COLOR_TEXT)
+
+        # label, left-aligned, vertically centered against the number
+        lbl_bbox = draw.textbbox((0, 0), label, font=label_font)
+        lbl_h = lbl_bbox[3] - lbl_bbox[1]
+        label_y = block_top - lbl_bbox[1] + (num_h - lbl_h) // 2
+        draw.text((margin, label_y), label, font=label_font, fill=_COLOR_TEXT)
+
+        # progress bar below the number
+        bar_y = block_top + num_h + bar_gap
         bar_box = [margin, bar_y, margin + bar_width, bar_y + bar_height]
         draw.rounded_rectangle(bar_box, radius=bar_height // 2, fill=_COLOR_TRACK)
 
@@ -202,8 +211,8 @@ def render_frame(cpu_temp, gpu_temp, font_path, warn_temp, crit_temp, scale_max)
             color = bar_color(temp, warn_temp, crit_temp)
             draw.rounded_rectangle(fill_box, radius=bar_height // 2, fill=color)
 
-    draw_row(row_height // 2 - int(10 * SUPERSAMPLE), "CPU", cpu_temp)
-    draw_row(row_height + row_height // 2 - int(10 * SUPERSAMPLE), "GPU", gpu_temp)
+    draw_row(row_height // 2, "CPU", cpu_temp)
+    draw_row(row_height + row_height // 2, "GPU", gpu_temp)
 
     img = img.resize((CANVAS_SIZE, CANVAS_SIZE), Image.LANCZOS)
 
