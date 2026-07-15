@@ -43,6 +43,11 @@ _READ_LENGTH = 64
 _WRITE_LENGTH = 64
 _MAX_READ_ATTEMPTS = 12
 
+# some devices (e.g. the Kraken 2024 Plus) push status broadcasts much more
+# frequently than _MAX_READ_ATTEMPTS allows for; a dedicated, larger budget is
+# used when only skipping over broadcasts while waiting for a real response
+_MAX_BROADCAST_SKIP_ATTEMPTS = 200
+
 _LCD_TOTAL_MEMORY = 24320
 
 # some LCD-capable Krakens (e.g. the 2024 Plus) continuously push unsolicited
@@ -790,12 +795,14 @@ class KrakenZ3(KrakenX3):
         response to the last command, silently corrupting bucket
         bookkeeping (see issues #864 and #908).
         """
-        for _ in range(_MAX_READ_ATTEMPTS):
+        for _ in range(_MAX_BROADCAST_SKIP_ATTEMPTS):
             msg = self._read()
             if bytes(msg[0:2]) == _LCD_STATUS_BROADCAST_PREFIX:
                 continue
             return msg
-        assert False, f"no response received (attempts={_MAX_READ_ATTEMPTS}, only status broadcasts)"
+        assert (
+            False
+        ), f"no response received (attempts={_MAX_BROADCAST_SKIP_ATTEMPTS}, only status broadcasts)"
 
     def _bulk_write(self, data):
         if sys.platform == "win32":
@@ -832,8 +839,15 @@ class KrakenZ3(KrakenX3):
             self.brightness = msg[0x18]
             self.orientation = msg[0x1A]
 
-        def _is_2023_fw_version2():
+        def _uses_simple_lcd_protocol():
             device_product_id = self.device.product_id
+            if device_product_id == 0x3014:
+                # the Kraken 2024 Plus's bucket protocol appears to be
+                # unimplemented: bucket queries/deletes never receive a
+                # real response, only unsolicited status broadcasts (see
+                # issues #864 and #908); use the bucket-free transfer path
+                # instead, as already done for 2023 units on firmware 2.X.Y
+                return True
             if device_product_id == 0x300E:
                 self._get_fw_version()
                 return self._fw[0] == 2
@@ -854,7 +868,7 @@ class KrakenZ3(KrakenX3):
             self._write([0x30, 0x02, 0x01, self.brightness, 0x0, 0x0, 0x1, int(value_int / 90)])
             return
         elif mode == "static":
-            if _is_2023_fw_version2():
+            if _uses_simple_lcd_protocol():
                 data = self._prepare_static_file_rgb16(value, self.orientation)
                 self._send_2023_data_fw2(
                     data, [0x06, 0x0, 0x0, 0x0] + list(len(data).to_bytes(4, "little"))
@@ -870,7 +884,7 @@ class KrakenZ3(KrakenX3):
                 self._send_data(data, [0x02, 0x0, 0x0, 0x0] + list(len(data).to_bytes(4, "little")))
             return
         elif mode == "gif":
-            if _is_2023_fw_version2():
+            if _uses_simple_lcd_protocol():
                 raise NotSupportedByDriver(
                     "gif images are not supported on firmware 2.X.Y, please see issue #631"
                 )
