@@ -33,14 +33,23 @@ on any Linux system with those sensors exposed; use `--list-sensors` to check.
    `generate-uaccess-udev-rules.py`) or run as `root`/with `sudo`.
 
 2. Create an isolated virtual environment (SteamOS's system Python is
-   managed by pacman, so don't install packages globally):
+   managed by pacman, so don't install packages globally). **Important:**
+   this branch (`personal/kraken-lcd-monitor`) includes the fix for the
+   Kraken 2024 Plus static LCD images from `fix-908-kraken-2024-plus-lcd-static`,
+   merged in on top of `main`. That fix isn't released on PyPI yet, so
+   liquidctl must be installed from this checkout (editable install), *not*
+   with a plain `pip install liquidctl`:
 
    ```
-   mkdir -p ~/kraken-lcd-monitor
-   cp kraken_lcd_monitor.py ~/kraken-lcd-monitor/
+   git clone -b personal/kraken-lcd-monitor <your-fork-url> ~/liquidctl-src
    python3 -m venv ~/kraken-lcd-monitor/venv
-   ~/kraken-lcd-monitor/venv/bin/pip install liquidctl pillow psutil
+   ~/kraken-lcd-monitor/venv/bin/pip install -e ~/liquidctl-src
+   ~/kraken-lcd-monitor/venv/bin/pip install psutil
+   cp ~/liquidctl-src/extra/contrib/kraken-lcd-monitor/kraken_lcd_monitor.py ~/kraken-lcd-monitor/
    ```
+
+   Updating later is then just `git -C ~/liquidctl-src pull` (no need to
+   reinstall, thanks to the editable install).
 
 3. Sanity-check sensor detection and manually try a run:
 
