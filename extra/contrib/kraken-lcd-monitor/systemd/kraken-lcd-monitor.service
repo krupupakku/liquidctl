@@ -1,0 +1,14 @@
+[Unit]
+Description=Kraken LCD CPU/GPU temperature monitor
+After=liquidcfg.service
+
+[Service]
+Type=simple
+# replace "deck" below with your actual username if different (whoami)
+User=deck
+ExecStart=/home/deck/kraken-lcd-monitor/venv/bin/python3 /home/deck/kraken-lcd-monitor/kraken_lcd_monitor.py --interval 2
+ExecStopPost=/home/deck/kraken-lcd-monitor/venv/bin/liquidctl --match kraken set lcd screen liquid
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
