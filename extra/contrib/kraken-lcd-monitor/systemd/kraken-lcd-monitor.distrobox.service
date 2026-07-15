@@ -28,7 +28,12 @@ Description=Kraken LCD CPU/GPU temperature monitor (via distrobox)
 [Service]
 Type=simple
 ExecStart=/usr/bin/distrobox enter liquictl-box -- /home/deck/kraken-lcd-monitor/venv/bin/python3 /home/deck/Developer/liquidctl/extra/contrib/kraken-lcd-monitor/kraken_lcd_monitor.py --match kraken --interval 2
-ExecStopPost=/usr/bin/distrobox enter liquictl-box -- /home/deck/kraken-lcd-monitor/venv/bin/liquidctl --match kraken set lcd screen liquid
+# restore the stock "liquid" screen when the service is stopped manually;
+# wrapped in `timeout` and capped by TimeoutStopSec so it can never hang the
+# system shutdown (podman/the container may already be tearing down then, and
+# restoring the screen at poweroff is pointless anyway)
+ExecStopPost=-/usr/bin/timeout 8 /usr/bin/distrobox enter liquictl-box -- /home/deck/kraken-lcd-monitor/venv/bin/liquidctl --match kraken set lcd screen liquid
+TimeoutStopSec=12s
 Restart=on-failure
 
 [Install]
