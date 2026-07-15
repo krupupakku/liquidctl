@@ -16,6 +16,8 @@ SteamOS desktop with an AMD GPU**, with liquidctl running inside a
 LCD-capable Krakens and other Linux systems, but this README documents the
 exact SteamOS + distrobox setup that is actually in use.
 
+![Example of what is rendered to the LCD](preview.png)
+
 > **Important:** this branch (`personal/kraken-lcd-monitor`) has the fix for
 > Kraken 2024 Plus static LCD images (from `fix-908-kraken-2024-plus-lcd-static`)
 > merged on top of `main`. That fix is **not** on PyPI yet, so liquidctl must
