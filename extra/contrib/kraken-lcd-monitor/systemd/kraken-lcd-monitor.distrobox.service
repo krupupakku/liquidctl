@@ -1,0 +1,30 @@
+# Systemd USER service for running the monitor when liquidctl lives inside a
+# distrobox container (the typical SteamOS setup).
+#
+# systemd is not available *inside* the container, so this unit runs on the
+# HOST and uses `distrobox enter` to execute the script inside the container
+# named below. Because distrobox shares your home directory, the paths under
+# /home/<user> are the same on the host and in the container.
+#
+# Install (run these on the HOST, i.e. outside the container):
+#   mkdir -p ~/.config/systemd/user
+#   cp kraken-lcd-monitor.distrobox.service ~/.config/systemd/user/kraken-lcd-monitor.service
+#   # let the service start at boot without an interactive login:
+#   loginctl enable-linger "$USER"
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now kraken-lcd-monitor
+#
+# Adjust the container name (liquictl-box), the username (deck) and the
+# `distrobox` path (check with `command -v distrobox` on the host) if needed.
+
+[Unit]
+Description=Kraken LCD CPU/GPU temperature monitor (via distrobox)
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/distrobox enter liquictl-box -- /home/deck/kraken-lcd-monitor/venv/bin/python3 /home/deck/kraken-lcd-monitor/kraken_lcd_monitor.py --interval 2
+ExecStopPost=/usr/bin/distrobox enter liquictl-box -- /home/deck/kraken-lcd-monitor/venv/bin/liquidctl --match kraken set lcd screen liquid
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
