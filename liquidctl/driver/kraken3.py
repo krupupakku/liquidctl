@@ -45,6 +45,16 @@ _MAX_READ_ATTEMPTS = 12
 
 _LCD_TOTAL_MEMORY = 24320
 
+# some LCD-capable Krakens (e.g. the 2024 Plus) continuously push unsolicited
+# status broadcasts on the same endpoint used for command responses; these
+# must be filtered out of single, blind reads or they will be mistaken for
+# the response to the last command (see issues #864 and #908)
+_LCD_STATUS_BROADCAST_PREFIX = bytes([0x75, 0x02])
+
+# generic error response prefix used by the LCD/bucket protocol; the second
+# byte and remaining fields vary depending on the command that was rejected
+_LCD_ERROR_PREFIX = 0xFF
+
 _STATUS_TEMPERATURE = "Liquid temperature"
 _STATUS_PUMP_SPEED = "Pump speed"
 _STATUS_PUMP_DUTY = "Pump duty"
@@ -768,7 +778,24 @@ class KrakenZ3(KrakenX3):
 
     def _write_then_read(self, data):
         self._write(data)
-        return self._read()
+        return self._read_skipping_broadcasts()
+
+    def _read_skipping_broadcasts(self):
+        """
+        Reads a single message, discarding any unsolicited LCD status
+        broadcasts along the way.
+
+        Without this, a blind single read (as previously done by
+        `_write_then_read`) can consume a broadcast instead of the actual
+        response to the last command, silently corrupting bucket
+        bookkeeping (see issues #864 and #908).
+        """
+        for _ in range(_MAX_READ_ATTEMPTS):
+            msg = self._read()
+            if bytes(msg[0:2]) == _LCD_STATUS_BROADCAST_PREFIX:
+                continue
+            return msg
+        assert False, f"no response received (attempts={_MAX_READ_ATTEMPTS}, only status broadcasts)"
 
     def _bulk_write(self, data):
         if sys.platform == "win32":
@@ -980,6 +1007,10 @@ class KrakenZ3(KrakenX3):
 
         assert self.bulk_device, "Cannot find bulk out device"
 
+        # drain any backlog of queued status broadcasts before starting the
+        # handshake, since some devices push them continuously (see #864)
+        self.device.clear_enqueued_reports()
+
         self._write_then_read([0x36, 0x03])  # unknown
 
         buckets = self._query_buckets()  # query all buckets and store their response
@@ -1053,6 +1084,7 @@ class KrakenZ3(KrakenX3):
         buckets = {}
         for bI in range(16):
             response = self._write_then_read([0x30, 0x04, bI])  # query bucket
+            _LOGGER.debug("bucket %d info: %r", bI, LazyHexRepr(response[0:22]))
             buckets[bI] = response
         return buckets
 
@@ -1143,7 +1175,15 @@ class KrakenZ3(KrakenX3):
         def parse_delete_result(msg):
             return msg[14] == 0x1
 
-        return self._read_until_first_match({b"\x33\x02": parse_delete_result})
+        def parse_delete_error(msg):
+            _LOGGER.debug(
+                "bucket %d delete rejected by device: %r", bucketIndex, LazyHexRepr(msg[0:20])
+            )
+            return False
+
+        return self._read_until_first_match(
+            {b"\x33\x02": parse_delete_result, b"\xff\x02": parse_delete_error}
+        )
 
     def _delete_all_buckets(self):
         """
@@ -1158,6 +1198,9 @@ class KrakenZ3(KrakenX3):
         switches active bucket, returns true if successful, false otherwise
         """
         response = self._write_then_read([0x38, 0x1, mode, bucketIndex])
+        if response[0] == _LCD_ERROR_PREFIX:
+            _LOGGER.debug("bucket switch rejected by device: %r", LazyHexRepr(response[0:20]))
+            return False
         return response[14] == 0x1
 
     def _setup_bucket(self, startBucketIndex, endBucketIndex, startingMemoryAddress, memorySize):
@@ -1177,4 +1220,7 @@ class KrakenZ3(KrakenX3):
                 0x1,
             ]
         )
+        if response[0] == _LCD_ERROR_PREFIX:
+            _LOGGER.debug("bucket setup rejected by device: %r", LazyHexRepr(response[0:20]))
+            return False
         return response[14] == 0x1
