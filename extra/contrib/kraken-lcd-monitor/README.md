@@ -117,8 +117,12 @@ Verify the venv is using the **fixed** liquidctl (must print a path containing
 ```
 
 On this machine the auto-detected sensors are `k10temp.tctl` (CPU) and
-`amdgpu.edge` (GPU). If yours differ, pass them explicitly with
-`--cpu-sensor <chip.label> --gpu-sensor <chip.label>`.
+`amdgpu.junction` (GPU).  On systems with both a discrete GPU and an APU
+(both exposing `amdgpu` hwmon entries), `junction` is preferred because it
+is only present on discrete GPUs — this avoids accidentally monitoring the
+APU.  If yours differ, pass them explicitly with
+`--cpu-sensor <chip.label> --gpu-sensor <chip.label>`, and use
+`--list-sensors` to see all available keys.
 
 ### 6. Install the systemd USER service (on the HOST)
 
@@ -228,6 +232,15 @@ host and update the two `ExecStart`/`ExecStopPost` lines if it differs.
 **The LCD is stuck on the last temperature frame**
 Restore the default screen manually (from inside the container):
 `liquidctl --match kraken set lcd screen liquid`.
+
+**GPU temperature seems wrong (too low / matches CPU rather than the GPU)**
+If you have both a discrete GPU and an APU with integrated graphics, both
+register under the `amdgpu` hwmon chip name.  The script now auto-detects
+`amdgpu.junction` first (only present on discrete GPUs) to avoid this;
+however, if your discrete GPU doesn't expose `junction`, run
+`--list-sensors` and pass the correct key explicitly with `--gpu-sensor`.
+Duplicate labels are automatically suffixed (`amdgpu.edge#2`, etc.) so
+every sensor has a unique key.
 
 ---
 
