@@ -110,13 +110,29 @@ def find_font(explicit_path=None):
 
 
 def read_all_sensors():
-    """Return a flat {"chip.label": value} dict from psutil, CPU freq included."""
+    """Return a flat {"chip.label": value} dict from psutil.
+
+    When multiple hwmon devices share the same chip name (e.g. two ``amdgpu``
+    instances for a discrete GPU and an APU), duplicate labels are suffixed
+    with ``#2``, ``#3``, ... so that every sensor gets a unique key.  The first
+    occurrence keeps the plain ``chip.label`` form for backward compatibility.
+    """
     sensors = {}
     for chip, entries in psutil.sensors_temperatures().items():
         for entry in entries:
             label = entry.label or "unnamed"
             key = f"{chip}.{label.lower().replace(' ', '_')}"
-            sensors[key] = entry.current
+            if key not in sensors:
+                sensors[key] = entry.current
+            else:
+                n = 2
+                while f"{key}#{n}" in sensors:
+                    n += 1
+                suffixed = f"{key}#{n}"
+                LOGGER.debug(
+                    "duplicate sensor key %s, renamed to %s", key, suffixed
+                )
+                sensors[suffixed] = entry.current
     return sensors
 
 
@@ -256,7 +272,7 @@ def main():
     gpu_sensor = resolve_sensor(
         args["--gpu-sensor"],
         sensors,
-        preferred=[("amdgpu", "edge"), ("amdgpu", "junction")],
+        preferred=[("amdgpu", "junction"), ("amdgpu", "edge")],
         kind="gpu",
     )
 
